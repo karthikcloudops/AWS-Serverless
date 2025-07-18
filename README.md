@@ -13,6 +13,16 @@ This application uses the following AWS services:
 - **CloudFront**: Content delivery network for the frontend
 - **S3**: Static website hosting for the frontend
 
+### Architecture Diagram
+
+![AWS Serverless Architecture](AWS_Serverless_Architecture.jpg)
+
+**Data Flow:**
+- **Frontend**: Users access the application through CloudFront, which serves static files from S3
+- **API Requests**: API Gateway routes requests to appropriate Lambda functions
+- **Database**: Lambda functions perform CRUD operations on DynamoDB
+- **Authentication**: Cognito handles user authentication and authorization
+
 ## 📁 Project Structure
 
 ```
@@ -242,6 +252,20 @@ terraform output
 # - API: api_gateway_url
 ```
 
+#### Step 7: Test Your Deployment
+```bash
+# Test frontend access
+curl -I $(terraform output -raw cloudfront_url)
+
+# Test API endpoint
+curl -X GET $(terraform output -raw api_gateway_url)
+
+# Test creating an item
+curl -X POST $(terraform output -raw api_gateway_url) \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Item", "description": "Test description", "category": "testing"}'
+```
+
 ### Alternative: Deploy with CloudFormation
 
 If you prefer CloudFormation over Terraform:
@@ -398,6 +422,24 @@ aws configure get region
 cd application/lambda
 
 # Create virtual environment
+```
+
+#### 7. CloudFront Access Issues
+```bash
+# Ensure index.html is at the root of S3 bucket
+aws s3 mv s3://$(terraform output -raw s3_bucket_name)/html/index.html s3://$(terraform output -raw s3_bucket_name)/index.html
+
+# CloudFront may take 5-10 minutes to update after changes
+# Check CloudFront distribution status
+aws cloudfront get-distribution --id $(terraform output -raw cloudfront_distribution_id)
+```
+
+#### 8. S3 Bucket Deletion Issues
+```bash
+# If you get "BucketNotEmpty" error during terraform destroy
+aws s3 rm s3://$(terraform output -raw s3_bucket_name) --recursive
+terraform destroy
+```
 python3.12 -m venv venv
 source venv/bin/activate
 
