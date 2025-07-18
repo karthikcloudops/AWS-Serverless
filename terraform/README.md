@@ -13,13 +13,12 @@ This directory contains the Terraform configuration for deploying the AWS server
 
 ```
 terraform/
-├── main.tf              # Main Terraform configuration
-├── variables.tf         # Variable definitions
-├── outputs.tf          # Output values
+├── main.tf              # Main Terraform configuration (includes variables and outputs)
 ├── README.md           # This file
-└── scripts/
-    ├── package-lambda.sh  # Script to package Lambda functions
-    └── deploy.sh          # Deployment script
+├── scripts/
+│   ├── package-lambda.sh  # Script to package Lambda functions
+│   └── deploy.sh          # Deployment script
+└── terraform.tfstate    # Terraform state file (created after deployment)
 ```
 
 ## Quick Start
@@ -64,6 +63,23 @@ aws s3 sync ../application/frontend/ s3://$(terraform output -raw s3_bucket_name
 ```bash
 # If index.html is in html/ subdirectory, move it to root
 aws s3 mv s3://$(terraform output -raw s3_bucket_name)/html/index.html s3://$(terraform output -raw s3_bucket_name)/index.html
+```
+
+### 6. Test Your Deployment
+
+Test both frontend and backend functionality:
+
+```bash
+# Test frontend access
+curl -I $(terraform output -raw cloudfront_url)
+
+# Test API endpoint
+curl -X GET $(terraform output -raw api_gateway_url)
+
+# Test creating an item
+curl -X POST $(terraform output -raw api_gateway_url) \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Item", "description": "Test description", "category": "testing"}'
 ```
 
 ## Configuration
@@ -114,8 +130,14 @@ The Terraform configuration creates:
 To destroy all resources:
 
 ```bash
+# First, empty the S3 bucket if it contains files
+aws s3 rm s3://$(terraform output -raw s3_bucket_name) --recursive
+
+# Then destroy all resources
 terraform destroy
 ```
+
+**Note**: If you encounter a "BucketNotEmpty" error during destroy, manually empty the S3 bucket first using the command above.
 
 ## Troubleshooting
 
@@ -128,7 +150,9 @@ terraform destroy
    - Ensure `index.html` is at the root of the S3 bucket (not in subdirectories)
    - CloudFront distribution may take 5-10 minutes to update after configuration changes
    - Check that S3 bucket has public read access enabled
+   - CloudFront uses S3 website endpoint, not bucket domain
 5. **Frontend file structure**: The `index.html` file must be at the root level of the S3 bucket for CloudFront to serve it correctly
+6. **S3 bucket deletion**: If you get "BucketNotEmpty" error during destroy, manually empty the bucket first
 
 ### Testing Your Deployment
 
@@ -136,10 +160,15 @@ After deployment, test both endpoints:
 
 ```bash
 # Test frontend access
-curl -I https://$(terraform output -raw cloudfront_url)
+curl -I $(terraform output -raw cloudfront_url)
 
 # Test API endpoint
 curl -X GET $(terraform output -raw api_gateway_url)
+
+# Test creating an item
+curl -X POST $(terraform output -raw api_gateway_url) \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Item", "description": "Test description", "category": "testing"}'
 ```
 
 ### Logs
@@ -155,4 +184,30 @@ Check CloudWatch logs for Lambda functions:
 - The current configuration uses `NONE` authorization for API Gateway
 - In production, implement proper authentication using Cognito
 - Consider enabling CloudTrail for audit logging
-- Review and adjust IAM permissions as needed 
+- Review and adjust IAM permissions as needed
+- S3 bucket is configured for public read access (required for static website hosting)
+
+## Complete Deployment Example
+
+Here's a complete example of deploying the application from scratch:
+
+```bash
+# 1. Package Lambda functions
+./scripts/package-lambda.sh
+
+# 2. Initialize Terraform
+terraform init
+
+# 3. Deploy infrastructure
+terraform apply -auto-approve
+
+# 4. Deploy frontend
+aws s3 sync ../application/frontend/ s3://$(terraform output -raw s3_bucket_name) --delete
+
+# 5. Move index.html to root if needed
+aws s3 mv s3://$(terraform output -raw s3_bucket_name)/html/index.html s3://$(terraform output -raw s3_bucket_name)/index.html
+
+# 6. Test deployment
+curl -I $(terraform output -raw cloudfront_url)
+curl -X GET $(terraform output -raw api_gateway_url)
+``` 
