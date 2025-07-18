@@ -56,7 +56,14 @@ terraform apply
 After the infrastructure is deployed, upload the frontend files to S3:
 
 ```bash
-aws s3 sync ../application/frontend/ s3://$(terraform output -raw frontend_bucket_name) --delete
+aws s3 sync ../application/frontend/ s3://$(terraform output -raw s3_bucket_name) --delete
+```
+
+**Important**: Ensure that `index.html` is at the root level of the S3 bucket. If your frontend files are in subdirectories (e.g., `html/index.html`), move the `index.html` file to the root:
+
+```bash
+# If index.html is in html/ subdirectory, move it to root
+aws s3 mv s3://$(terraform output -raw s3_bucket_name)/html/index.html s3://$(terraform output -raw s3_bucket_name)/index.html
 ```
 
 ## Configuration
@@ -117,6 +124,23 @@ terraform destroy
 1. **Lambda packaging errors**: Ensure Python 3.12 and zip are installed
 2. **Permission errors**: Check AWS credentials and permissions
 3. **API Gateway errors**: Wait a few minutes after deployment for propagation
+4. **CloudFront access issues**: 
+   - Ensure `index.html` is at the root of the S3 bucket (not in subdirectories)
+   - CloudFront distribution may take 5-10 minutes to update after configuration changes
+   - Check that S3 bucket has public read access enabled
+5. **Frontend file structure**: The `index.html` file must be at the root level of the S3 bucket for CloudFront to serve it correctly
+
+### Testing Your Deployment
+
+After deployment, test both endpoints:
+
+```bash
+# Test frontend access
+curl -I https://$(terraform output -raw cloudfront_url)
+
+# Test API endpoint
+curl -X GET $(terraform output -raw api_gateway_url)
+```
 
 ### Logs
 
